@@ -1,0 +1,29 @@
+{
+  "name": "crisp-voter-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "LGPL-3.0-only",
+  "description": "Oracle voter CLI for submitting encrypted ballots to a CRISP-resolved prediction market",
+  "bin": {
+    "crisp-vote": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "vote": "tsx src/cli.ts vote",
+    "status": "tsx src/cli.ts status",
+    "advance": "tsx src/cli.ts advance",
+    "tally": "tsx src/cli.ts tally"
+  },
+  "dependencies": {
+    "@crisp-e3/sdk": "0.10.0",
+    "@zk-kit/lean-imt": "^2.2.4",
+    "viem": "^2.51.2",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/yargs": "^17.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.5.0"
+  }
+}

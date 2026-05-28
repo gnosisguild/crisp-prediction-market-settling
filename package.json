@@ -1,0 +1,34 @@
+{
+  "name": "crisp-prediction-market",
+  "private": true,
+  "type": "module",
+  "license": "LGPL-3.0-only",
+  "scripts": {
+    "cmds": "bun scripts/help.ts",
+
+    "sepolia": "bun scripts/sepolia-deploy.ts",
+    "top-up": "bun scripts/top-up.ts",
+    "fund-voters": "bun scripts/fund-voters.ts",
+    "ui": "bun scripts/ui.ts",
+
+    "open": "bun scripts/vote-open.ts",
+    "status": "bun scripts/vote-status.ts",
+    "settle": "bun scripts/settle.ts",
+    "redeem": "bun scripts/redeem.ts",
+
+    "prep": "bun scripts/prep.ts",
+    "cast": "bun scripts/cast.ts",
+    "resolve": "bun scripts/resolve.ts",
+    "e2e": "bun scripts/e2e.ts",
+
+    "fetch-pk": "bun scripts/vote-fetch-pk.ts",
+    "fetch-round": "bun scripts/vote-fetch-round.ts",
+    "vote": "bun scripts/vote-real.ts",
+
+    "test:fork": "bun scripts/test-fork.ts",
+    "test:all": "bun scripts/test-all.ts"
+  },
+  "devDependencies": {
+    "viem": "^2.51.2"
+  }
+}

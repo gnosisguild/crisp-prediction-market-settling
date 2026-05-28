@@ -1,0 +1,37 @@
+# env files at any depth
+.env
+.env.local
+**/.env
+**/.env.local
+*.bak
+
+# generated / runtime
+deployments.local.json
+node_modules/
+**/node_modules/
+*.log
+
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# next.js
+ui/.next/
+ui/out/
+ui/next-env.d.ts
+
+# typescript incremental
+*.tsbuildinfo
+**/tsconfig.tsbuildinfo
+
+# lockfiles — keep bun.lock tracked for reproducible installs, ignore npm/yarn
+**/package-lock.json
+**/yarn.lock
+
+# voter-cli build output
+voter-cli/dist/
+
+# macOS
+.DS_Store
+**/.DS_Store
