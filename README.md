@@ -12,7 +12,94 @@ voter-cli/        Voter CLI using @crisp-e3/sdk
 scripts/          .env-driven bun orchestrators (prep / cast / resolve / e2e)
 ```
 
-## Quick start (Sepolia + real CRISP)
+## Try it on Sepolia (live demo)
+
+Cast an encrypted vote on a real market end-to-end without deploying anything. The frontend handles market creation + trading; voting itself runs from this CLI.
+
+Live frontend: **https://crisp-prediction-market-settling.vercel.app/**
+
+You'll need a Sepolia wallet with ~0.05 ETH, plus `git`, `bun`, and `foundry` (for `cast`).
+
+### 1. Get the CLI
+
+```bash
+git clone <this repo>
+cd crisp-prediction-market
+bun install
+cp .env.example .env
+```
+
+In `.env` set:
+
+```
+RPC=https://eth-sepolia.g.alchemy.com/v2/<your-key>
+DEPLOYER_KEY=0x<wallet with Sepolia ETH>
+VOTER_KEY=0x<can be the same wallet>
+VOTERS=0x<your wallet address>                   # comma-separated; add yourself
+ENCLAVE_API=https://crisp-api.enclave.gg
+```
+
+The contract addresses already in `.env.example` point at the current Sepolia deployment (Enclave, CRISPProgram, the deployed adapter/manager/USDC). Leave them.
+
+### 2. Top up the adapter so `openVote` can pay Enclave's fee (~5.3 USDC)
+
+```bash
+bun run top-up
+```
+
+Permissionless: mints 20 mUSDC to you and forwards them into the adapter's fee escrow.
+
+### 3. Give yourself a census token (must happen BEFORE step 5)
+
+```bash
+bun run fund-voters
+```
+
+Mints 1 DVT to each address in `VOTERS`. The CRISP server snapshots DVT holders at `openVote` time — fund before opening, not after.
+
+### 4. Create a market on the frontend
+
+Open https://crisp-prediction-market-settling.vercel.app/create, connect your wallet, pick a question and a short trading window (1 minute is fine for testing), click *Create*. Copy the new market address from the URL bar (`/markets/0x…`) into your `.env`:
+
+```
+MARKET=0x<the new market>
+```
+
+### 5. Wait for trading to close, then vote
+
+```bash
+bun run fresh    # waits for window close → openVote → DKG → fetch round → broadcast vote
+```
+
+Or step through manually:
+
+```bash
+bun run open        # adapter.openVote — allocates fresh e3Id
+bun run status      # rerun until "Voting open"
+bun run prep        # fetch pk + census leaves into /tmp/crisp-round-*.json
+bun run cast YES    # or NO — generates the Noir proof and broadcasts
+```
+
+### 6. Resolve and redeem
+
+After the input window closes (~5 minutes from `openVote`) the committee threshold-decrypts the tally; then:
+
+```bash
+bun run resolve     # proposeFromCRISP → wait challenge → redeemAll
+```
+
+### Inspect what happened
+
+The committee + e3 lifecycle is visible at **https://dashboard.theinterfold.com** — pick the *E3 inspector* tab and select your e3 id to see committee selection, key publish, your `InputPublished` event, decryption stage, and final result.
+
+### Troubleshooting
+
+- `Your address is not in the CRISP census` — you didn't `fund-voters` before `openVote`, or the DVT mint hadn't confirmed yet. Create a fresh market and try again.
+- `CRISP server error (500): execution reverted` — usually a stale `/tmp/crisp-round-*.json`. Re-run `bun run prep`.
+- `TradingStillOpen` from `bun run open` — chain timestamp lags by a block; wait one and retry.
+- `ERC20InsufficientAllowance` from `openVote` — adapter's fee balance is depleted. `bun run top-up` (permissionless).
+
+## Quick start (Sepolia + real CRISP) — deploy your own
 
 ```bash
 cp .env.example .env                     # fill in RPC, ENCLAVE_API, keys
