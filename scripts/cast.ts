@@ -2,10 +2,12 @@
 // Reads MARKET, VOTER_KEY, ENCLAVE_API, SIDE from .env (or CLI: bun run cast YES|NO).
 //
 // Assumes `bun run prep` has already been run for this market.
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { createPublicClient, http } from "viem";
 import {
   ENV,
   requireMarket,
+  requireAdapter,
   requireVoterKey,
   requireApi,
   step,
@@ -16,6 +18,7 @@ import {
 import { voterCli } from "./_proc";
 
 const MARKET = requireMarket();
+const ADAPTER = requireAdapter();
 const VOTER_KEY = requireVoterKey();
 const API = requireApi();
 
@@ -35,6 +38,37 @@ if (!existsSync(ROUND_JSON)) {
 
 step("cast", `${SIDE} weight=${WEIGHT} on ${MARKET}`);
 info(`round-data: ${ROUND_JSON}`);
+
+// Bail out if round.json was fetched for a different e3Id than the chain currently
+// has — its cached pk/leaves would be stale and the proof would silently fail.
+const cachedRound = JSON.parse(readFileSync(ROUND_JSON, "utf-8")) as { e3Id?: string };
+if (!cachedRound.e3Id) {
+  console.error(`\n  ✗ ${ROUND_JSON} missing e3Id field — re-run \`bun run prep\`.\n`);
+  process.exit(1);
+}
+const adapterAbi = [{
+  type: "function",
+  stateMutability: "view",
+  name: "e3IdOf",
+  inputs: [{ name: "m", type: "address" }],
+  outputs: [{ type: "uint256" }],
+}] as const;
+const client = createPublicClient({ transport: http(ENV.RPC) });
+const onChainE3Id = (await client.readContract({
+  address: ADAPTER,
+  abi: adapterAbi,
+  functionName: "e3IdOf",
+  args: [MARKET],
+})) as bigint;
+const cachedE3Id = BigInt(cachedRound.e3Id);
+if (onChainE3Id !== cachedE3Id) {
+  console.error(
+    `\n  ✗ e3Id mismatch: round.json=${cachedE3Id} but chain=${onChainE3Id}. Re-run \`bun run prep\`.\n`,
+  );
+  process.exit(1);
+}
+info(`e3Id ${onChainE3Id} matches cached round-data`);
+
 info(`generating BFV ciphertext + Noir proof (~30-110s first run, faster after)`);
 
 await voterCli.exec(

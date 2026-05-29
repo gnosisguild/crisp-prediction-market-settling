@@ -4,9 +4,11 @@ const groups: Array<[string, Array<[string, string]>]> = [
     ["bun run sepolia",                       "deploy mocks+adapter, mint Sepolia USDC, seed adapter"],
     ["bun run top-up [amount=20]",            "mint Sepolia USDC + topUpFee on the adapter (when openVote runs low)"],
     ["bun run fund-voters",                  "mint 1 CENSUS_TOKEN to each address in VOTERS (.env)"],
+    ["bun run create-market",                 "create + seed an AMM market (writes MARKET to .env)"],
     ["bun run ui",                            "start the Next.js trader UI"],
   ]],
   ["End-to-end voting (reads .env)", [
+    ["bun run fresh",                         "create-market → wait close → openVote → DKG → fetch → vote"],
     ["bun run e2e [YES|NO]",                  "prep + cast + resolve in one command"],
     ["bun run prep",                          "openVote → wait DKG + server-side census/setMerkleRoot → fetch round.json"],
     ["bun run cast [YES|NO]",                 "sign + BFV-encrypt + Noir-prove + publishInput"],

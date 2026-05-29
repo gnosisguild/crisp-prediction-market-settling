@@ -270,9 +270,11 @@ switch (cmd) {
       return s.startsWith("0x") ? s : `0x${s}`;
     });
 
-    const roundData = { publicKey: pkBytes, leaves, balance };
+    // Stamp the e3Id; cast.ts cross-checks this against adapter.e3IdOf(market)
+    // so stale pk/leaves can't silently be used against a different round.
+    const roundData = { e3Id: e3Id.toString(), publicKey: pkBytes, leaves, balance };
     writeFileSync(outPath, JSON.stringify(roundData, null, 2));
-    console.error(`pk: ${pkBytes.length} bytes  ·  leaves: ${leaves.length}  ·  balance: ${balance}`);
+    console.error(`pk: ${pkBytes.length} bytes  ·  leaves: ${leaves.length}  ·  balance: ${balance}  ·  e3Id: ${e3Id}`);
     console.error(`wrote ${outPath}`);
     break;
   }
