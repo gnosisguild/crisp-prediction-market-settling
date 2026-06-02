@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useWriteContract } from "wagmi";
 import type { Address } from "viem";
 import { adapterAbi, E3Stage, MarketStatus } from "@/lib/abis";
 import { ADDRESSES } from "@/lib/addresses";
-import { fmtRel, statusLabel, winnerLabel } from "@/lib/format";
+import { fmtRel, e3StageName, statusLabel, winnerLabel } from "@/lib/format";
 import { useNow } from "@/lib/useNow";
+import { E3Lifecycle } from "@/components/E3Lifecycle";
 
 function OpenVoteButton({ market, onChange }: { market: Address; onChange: () => void }) {
   const { writeContractAsync, isPending } = useWriteContract();
@@ -51,21 +53,11 @@ type Props = {
   resolutionProposedAt: bigint;
   firstChallengePeriod: bigint;
   proposedFromCrisp: boolean;
+  voteOpenedAt: bigint;
+  inputWindowDuration: bigint;
   onChange: () => void;
 };
 
-function stageName(s: number): string {
-  switch (s) {
-    case E3Stage.None: return "Not started";
-    case E3Stage.Requested: return "Requested";
-    case E3Stage.CommitteeFinalized: return "Committee finalized";
-    case E3Stage.KeyPublished: return "Voting open";
-    case E3Stage.CiphertextReady: return "Tallying";
-    case E3Stage.Complete: return "Decrypted ✓";
-    case E3Stage.Failed: return "Failed";
-    default: return "—";
-  }
-}
 
 export function ResolvePanel({
   market,
@@ -77,6 +69,8 @@ export function ResolvePanel({
   resolutionProposedAt,
   firstChallengePeriod,
   proposedFromCrisp,
+  voteOpenedAt,
+  inputWindowDuration,
   onChange,
 }: Props) {
   const { writeContractAsync, isPending } = useWriteContract();
@@ -86,10 +80,17 @@ export function ResolvePanel({
   const no = tally[1] ?? 0n;
   const total = yes + no;
   const yesPct = total === 0n ? 50 : Number((yes * 1000n) / total) / 10;
+  // decodeTally only returns values once the E3 is decrypted, so a 2-element tally means the
+  // result is out — show it even if the on-chain stage read lags behind at CiphertextReady.
+  const decrypted = e3Stage === E3Stage.Complete || tally.length >= 2;
 
   const finalizeAt = resolutionProposedAt + firstChallengePeriod;
   const challengeEnded = status === MarketStatus.Finalized;
   const now = useNow();
+  // Real ballot cutoff: the input window end. e3Stage can lag at KeyPublished after it elapses.
+  const windowEnd = voteOpenedAt + inputWindowDuration;
+  const windowElapsed = voteOpenedAt > 0n && inputWindowDuration > 0n && now >= Number(windowEnd);
+  const ballotsOpen = e3Stage === E3Stage.KeyPublished && !windowElapsed;
 
   async function onResolve() {
     setBusy(true);
@@ -107,29 +108,29 @@ export function ResolvePanel({
   }
 
   if (e3Id === 0n) {
-    const tradingClosed = status !== MarketStatus.Created;
+    const escalated = status === MarketStatus.EscalatedDisputeRaised;
     return (
       <div className="committee-panel">
         <div className="committee-head">
           <div>
             <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              CRISP committee
+              Sealed attester committee · CRISP
             </div>
             <div className="ttl">
-              {tradingClosed ? <>Ready to <em>open the vote</em>.</> : <>Vote opens when <em>trading closes</em>.</>}
+              {escalated ? <>Ready to <em>open the sealed vote</em>.</> : <>Opens when a dispute <em>escalates here</em>.</>}
             </div>
           </div>
           <div className="meta">no E3 allocated yet</div>
         </div>
 
-        {!tradingClosed ? (
+        {!escalated ? (
           <div style={{ marginTop: 14, fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink-soft)", lineHeight: 1.55 }}>
-            A CRISP committee will be allocated at the moment trading closes — not before. This avoids paying ciphernodes to babysit a vote that hasn&apos;t started.
+            The attester committee is allocated <b>just-in-time</b> — only once a dispute has escalated past the public token-holder vote. This avoids paying ciphernodes to babysit a committee that may never be needed.
           </div>
         ) : (
           <div style={{ marginTop: 14 }}>
             <div style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink-soft)", lineHeight: 1.55, marginBottom: 14 }}>
-              Trading has closed. Anyone can now call <span className="kbd">openVote</span> on the adapter — that allocates a fresh CRISP E3 with a monotonic id, forms the committee, and opens the encrypted ballot window.
+              The dispute has escalated to the attester layer. Anyone can now call <span className="kbd">openVote</span> on the adapter — that allocates a fresh CRISP E3, forms the committee, and opens the <b>encrypted</b> ballot window. Unlike the token vote, attester ballots stay sealed until the threshold tally is decrypted.
             </div>
             <OpenVoteButton market={market} onChange={onChange} />
           </div>
@@ -149,27 +150,17 @@ export function ResolvePanel({
             Sealed-vote oracle · <em>threshold tally</em>
           </div>
         </div>
-        <div className="meta">stage: {stageName(e3Stage)}</div>
+        <div className="meta">stage: {e3StageName(e3Stage)}</div>
       </div>
 
-      <div className="oracle-progress" style={{ marginTop: 18 }}>
-        <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          Threshold decryption progress
-        </div>
-        <div className="progress-track">
-          <div
-            className="progress-fill"
-            style={{ width: e3Stage >= E3Stage.Complete ? "100%" : e3Stage >= E3Stage.CiphertextReady ? "70%" : e3Stage >= E3Stage.KeyPublished ? "35%" : "8%" }}
-          />
-          <div className="threshold-mark" style={{ left: "67%" }} />
-        </div>
-        <div className="progress-meta">
-          <span>{e3Stage >= E3Stage.Complete ? "decrypted" : "ciphertext"} ·</span>
-          <span>threshold reached: {e3Stage >= E3Stage.Complete ? "yes" : "no"}</span>
-        </div>
-      </div>
+      <E3Lifecycle
+        e3Stage={e3Stage}
+        voteOpenedAt={voteOpenedAt}
+        inputWindowDuration={inputWindowDuration}
+        now={now}
+      />
 
-      {e3Stage === E3Stage.Complete && (
+      {decrypted && (
         <div className="revealed" style={{ marginTop: 18 }}>
           <div>
             <div className="lbl">Encrypted tally · revealed</div>
@@ -201,12 +192,36 @@ export function ResolvePanel({
         </div>
       )}
 
-      {e3Stage < E3Stage.Complete && (
+      {ballotsOpen && (
         <div style={{ marginTop: 16, fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink-soft)", lineHeight: 1.55 }}>
-          The committee is still tallying encrypted ballots. The on-chain tally is unreadable until the threshold of ciphernodes decrypts.
-          <div style={{ marginTop: 8, color: "var(--muted)" }}>
-            Run the voter CLI to cast encrypted ballots, then mark the E3 complete via the mock-oracle controls.
+          <b>Voting is open.</b> Attesters cast an encrypted ballot — proven in the browser, so the
+          tally stays sealed until the committee decrypts it.
+          <div style={{ marginTop: 12 }}>
+            <Link href={`/markets/${market}/vote`} className="btn amber" style={{ textDecoration: "none", display: "inline-block" }}>
+              Cast your sealed ballot →
+            </Link>
           </div>
+          <div style={{ marginTop: 8, color: "var(--muted)", fontSize: 11 }}>
+            (Headless alternative: <span className="kbd">bun run cast</span>.)
+          </div>
+        </div>
+      )}
+
+      {(e3Stage === E3Stage.Requested || e3Stage === E3Stage.CommitteeFinalized) && (
+        <div style={{ marginTop: 16, fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink-soft)", lineHeight: 1.55 }}>
+          The committee is being allocated and generating its threshold key. Voting opens once the key is published.
+        </div>
+      )}
+
+      {e3Stage === E3Stage.KeyPublished && windowElapsed && (
+        <div style={{ marginTop: 16, fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink-soft)", lineHeight: 1.55 }}>
+          The voting window has closed — no more ballots can be cast. Waiting for the committee to finalize and decrypt the tally.
+        </div>
+      )}
+
+      {e3Stage === E3Stage.CiphertextReady && !decrypted && (
+        <div style={{ marginTop: 16, fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink-soft)", lineHeight: 1.55 }}>
+          Voting is closed. The committee is threshold-decrypting the tally — it stays unreadable until enough ciphernodes decrypt.
         </div>
       )}
 

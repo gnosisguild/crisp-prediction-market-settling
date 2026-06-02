@@ -30,7 +30,7 @@ if (!RPC || !PK || !MANAGER || !USDC) {
 const QUESTION = process.argv[2] ?? process.env.QUESTION ?? "Will the CRISP vote settle correctly?";
 const DURATION_SEC = Number(process.argv[3] ?? process.env.DURATION_SEC ?? "300"); // 5 min default
 const SOURCE = process.env.SOURCE ?? "https://github.com/gnosisguild/CRISP";
-const INFO = process.env.INFO ?? "Resolved by an encrypted CRISP committee vote at close.";
+const INFO = process.env.INFO ?? "Resolved optimistically; disputes escalate to an encrypted CRISP attester vote.";
 const SEED_USDC = Number(process.env.SEED_USDC ?? "100"); // mUSDC seeded into AMM; 0 disables
 const SEED_AMOUNT = parseUnits(String(SEED_USDC), 6);
 

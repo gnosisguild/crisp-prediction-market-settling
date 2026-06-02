@@ -42,8 +42,26 @@ contract SimpleTruthMarket {
   SimpleYesNoToken public noToken;
 
   /* ---------- resolution state ---------- */
+  // Final settled outcome. Set only by the attester layer (settleFromAttesters) or the
+  // undisputed escape hatch. Drives finalization + redemption.
   uint256 public winningPosition; // 0 = unresolved, 1 = YES, 2 = NO, 3 = CANCELED
-  uint256 public resolutionProposedAt;
+  uint256 public resolutionProposedAt; // start of the FINAL challenge window
+
+  /* ---------- optimistic escalation ladder (trueo-shaped) ----------
+   * Stage 1  proposeOutcome      → an optimistic resolver claims an outcome (bond narrated in UI)
+   * Stage 2  dispute             → anyone challenges within the challenge window
+   * Stage 3  recordTokenVote     → MOCK financialized layer: a PUBLIC token-holder tally
+   * Stage 4  escalateToAttesters → dissatisfied party escalates to the sealed attester layer
+   * Stage 5  settleFromAttesters → the real CRISP committee tally settles the market (onlyManager)
+   * Bonds for stages 1–4 are UI narration only; the one real bond is the attester resolver
+   * bond posted by the CRISPResolverAdapter in stage 5. No slashing/refunds in this PoC. */
+  uint256 public proposedOutcome;   // optimistic claim, 0 = none
+  uint256 public proposedAt;        // start of the optimistic challenge window
+  bool public disputed;             // a challenge was raised
+  uint256 public tokenVoteYes;      // mock public token-holder tally
+  uint256 public tokenVoteNo;
+  bool public tokenVoteRecorded;
+  bool public escalated;            // escalated to the attester layer — un-gates openVote
 
   /* ---------- AMM state ---------- */
   uint256 public yesReserve;
@@ -53,7 +71,11 @@ contract SimpleTruthMarket {
   event Minted(address indexed account, uint256 amount);
   event LiquiditySeeded(address indexed by, uint256 amount, uint256 yesReserve, uint256 noReserve);
   event Bought(address indexed account, bool isYes, uint256 paymentTokenIn, uint256 sharesOut, uint256 newYesReserve, uint256 newNoReserve);
-  event ResolutionProposed(uint256 outcome);
+  event OutcomeProposed(address indexed proposer, uint256 outcome);
+  event Disputed(address indexed disputer);
+  event TokenVoteRecorded(uint256 yesVotes, uint256 noVotes);
+  event EscalatedToAttesters(address indexed by);
+  event ResolutionProposed(uint256 outcome); // emitted on the FINAL attester settle
   event Finalized(uint256 outcome);
   event Redeemed(address indexed account, uint256 payout);
 
@@ -66,6 +88,14 @@ contract SimpleTruthMarket {
   error ZeroAmount();
   error InvalidOutcome();
   error NoLiquidity();
+  error NothingProposed();
+  error AlreadyDisputed();
+  error NotDisputed();
+  error ChallengeWindowClosed();
+  error TokenVoteAlreadyRecorded();
+  error TokenVoteNotRecorded();
+  error NotEscalated();
+  error AlreadyEscalated();
 
   modifier onlyManager() {
     if (msg.sender != manager) revert NotManager();
@@ -104,14 +134,20 @@ contract SimpleTruthMarket {
   /* ---------- ITruthMarket subset ---------- */
 
   function getCurrentStatus() public view returns (MarketStatus) {
-    if (winningPosition == 0) {
-      if (block.timestamp < endOfTrading) return MarketStatus.Created;
-      return MarketStatus.OpenForResolution;
+    // Final attester settle posted → final challenge window, then Finalized.
+    if (winningPosition != 0) {
+      if (block.timestamp < resolutionProposedAt + firstChallengePeriod) {
+        return MarketStatus.ResolutionProposed;
+      }
+      return MarketStatus.Finalized;
     }
-    if (block.timestamp < resolutionProposedAt + firstChallengePeriod) {
-      return MarketStatus.ResolutionProposed;
-    }
-    return MarketStatus.Finalized;
+    // Walk the escalation ladder from the deepest reached stage outward.
+    if (escalated) return MarketStatus.EscalatedDisputeRaised; // attester (CRISP) vote in flight
+    if (tokenVoteRecorded) return MarketStatus.SetByCouncil;    // token vote done, awaiting escalation
+    if (disputed) return MarketStatus.DisputeRaised;
+    if (proposedOutcome != 0) return MarketStatus.ResolutionProposed; // optimistic challenge window
+    if (block.timestamp < endOfTrading) return MarketStatus.Created;
+    return MarketStatus.OpenForResolution;
   }
 
   function paused() external pure returns (bool) {
@@ -238,15 +274,70 @@ contract SimpleTruthMarket {
     nOut = (noReserve + dx) - (k / newYes);
   }
 
-  /* ---------- resolution ---------- */
+  /* ---------- resolution: optimistic escalation ladder ---------- */
 
-  function proposeResolution(uint256 _outcome) external onlyManager {
-    if (winningPosition != 0) revert AlreadyProposed();
+  /// @notice Stage 1 — an optimistic resolver claims an outcome once trading closes.
+  ///         Permissionless and bond-free on-chain; the proposer bond is narrated in the UI.
+  function proposeOutcome(uint256 _outcome) external {
     if (block.timestamp < endOfTrading) revert TradingStillOpen();
+    if (proposedOutcome != 0) revert AlreadyProposed();
+    if (_outcome == 0 || _outcome > _CANCELED) revert InvalidOutcome();
+    proposedOutcome = _outcome;
+    proposedAt = block.timestamp;
+    emit OutcomeProposed(msg.sender, _outcome);
+  }
+
+  /// @notice Stage 2 — anyone challenges the optimistic proposal within the challenge window.
+  function dispute() external {
+    if (proposedOutcome == 0) revert NothingProposed();
+    if (disputed) revert AlreadyDisputed();
+    if (block.timestamp >= proposedAt + firstChallengePeriod) revert ChallengeWindowClosed();
+    disputed = true;
+    emit Disputed(msg.sender);
+  }
+
+  /// @notice Stage 3 — MOCK financialized layer: record a PUBLIC token-holder tally.
+  ///         A stand-in for a token-weighted vote; intentionally transparent (the opposite of
+  ///         the sealed attester vote) to demonstrate the privacy contrast.
+  function recordTokenVote(uint256 _yesVotes, uint256 _noVotes) external {
+    if (!disputed) revert NotDisputed();
+    if (tokenVoteRecorded) revert TokenVoteAlreadyRecorded();
+    tokenVoteYes = _yesVotes;
+    tokenVoteNo = _noVotes;
+    tokenVoteRecorded = true;
+    emit TokenVoteRecorded(_yesVotes, _noVotes);
+  }
+
+  /// @notice Stage 4 — escalate the dispute to the sealed attester layer. This is what un-gates
+  ///         CRISPResolverAdapter.openVote: the committee is only allocated once we reach here.
+  function escalateToAttesters() external {
+    if (!tokenVoteRecorded) revert TokenVoteNotRecorded();
+    if (escalated) revert AlreadyEscalated();
+    escalated = true;
+    emit EscalatedToAttesters(msg.sender);
+  }
+
+  /// @notice Stage 5 — the real CRISP attester tally settles the market. Manager-only; reached
+  ///         via CRISPResolverAdapter.proposeFromCRISP → manager. Starts the final challenge window.
+  function settleFromAttesters(uint256 _outcome) external onlyManager {
+    if (!escalated) revert NotEscalated();
+    if (winningPosition != 0) revert AlreadyProposed();
     if (_outcome == 0 || _outcome > _CANCELED) revert InvalidOutcome();
     winningPosition = _outcome;
     resolutionProposedAt = block.timestamp;
     emit ResolutionProposed(_outcome);
+  }
+
+  /// @notice Soundness escape hatch (not featured in the escalation-only demo UI): an undisputed
+  ///         optimistic proposal finalizes itself once its challenge window elapses.
+  function finalizeUndisputed() external {
+    if (proposedOutcome == 0) revert NothingProposed();
+    if (disputed) revert AlreadyDisputed();
+    if (winningPosition != 0) revert AlreadyProposed();
+    if (block.timestamp < proposedAt + firstChallengePeriod) revert ChallengePeriodActive();
+    winningPosition = proposedOutcome;
+    resolutionProposedAt = proposedAt; // window already elapsed → immediately Finalized
+    emit ResolutionProposed(proposedOutcome);
   }
 
   /* ---------- redemption ---------- */

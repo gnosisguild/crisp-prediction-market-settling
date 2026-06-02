@@ -5,22 +5,9 @@ import { useMarkets } from "@/lib/useMarkets";
 import { useReadContracts } from "wagmi";
 import { crispProgramAbi, enclaveAbi, E3Stage } from "@/lib/abis";
 import { ADDRESSES } from "@/lib/addresses";
-import { fmtRel, statusLabel } from "@/lib/format";
+import { fmtRel, statusLabel, e3StageName } from "@/lib/format";
 import { useNow } from "@/lib/useNow";
 import { useMemo } from "react";
-
-function stageName(s: number): string {
-  switch (s) {
-    case E3Stage.None: return "Not started";
-    case E3Stage.Requested: return "Requested";
-    case E3Stage.CommitteeFinalized: return "Committee finalized";
-    case E3Stage.KeyPublished: return "Voting open";
-    case E3Stage.CiphertextReady: return "Tallying";
-    case E3Stage.Complete: return "Decrypted ✓";
-    case E3Stage.Failed: return "Failed";
-    default: return "—";
-  }
-}
 
 export default function OraclePage() {
   const markets = useMarkets();
@@ -42,7 +29,7 @@ export default function OraclePage() {
           Oracle overview · <em>CRISP committee</em> state.
         </h1>
         <div className="blurb">
-          Every market is bound to one E3 (encrypted execution environment). This page shows the live committee stage for each binding — voters cast encrypted ballots; once decrypted, anyone can settle the linked market.
+          A market only binds a CRISP E3 when a dispute escalates to the attester layer — the committee is allocated just-in-time, not at creation. This page shows the live committee stage for every market that has reached the sealed attester vote.
         </div>
       </div>
 
@@ -107,7 +94,7 @@ export default function OraclePage() {
               </div>
               <div className="resolver">
                 <span className={`pip${stage === E3Stage.Complete ? "" : stage === E3Stage.None ? " off" : ""}`} />
-                {stageName(stage)}
+                {e3StageName(stage)}
               </div>
               <div className="vol">
                 <span className="k">Encrypted tally</span>

@@ -8,16 +8,23 @@ const groups: Array<[string, Array<[string, string]>]> = [
     ["bun run ui",                            "start the Next.js trader UI"],
   ]],
   ["End-to-end voting (reads .env)", [
-    ["bun run fresh",                         "create-market → wait close → openVote → DKG → fetch → vote"],
+    ["bun run fresh",                         "create-market → wait close → ladder → openVote → DKG → fetch → vote"],
     ["bun run e2e [YES|NO]",                  "prep + cast + resolve in one command"],
-    ["bun run prep",                          "openVote → wait DKG + server-side census/setMerkleRoot → fetch round.json"],
+    ["bun run prep",                          "ladder → openVote → wait DKG + server-side census/setMerkleRoot → fetch round.json"],
     ["bun run cast [YES|NO]",                 "sign + BFV-encrypt + Noir-prove + publishInput"],
     ["bun run resolve",                       "wait decrypt → settle → wait challenge → redeem"],
   ]],
+  ["Escalation ladder ([market] from .env if omitted)", [
+    ["bun run propose [market] <yes|no>",     "stage 1 · optimistically propose an outcome"],
+    ["bun run dispute [market]",              "stage 2 · dispute the proposal"],
+    ["bun run token-vote [market] <y> <n>",   "stage 3 · record the public (mock) token-holder tally"],
+    ["bun run escalate [market]",             "stage 4 · escalate to the sealed attester layer"],
+    ["bun run ladder [market]",               "walk stages 1–4 idempotently (used by prep/fresh)"],
+  ]],
   ["Single steps ([market] from .env if omitted)", [
-    ["bun run open [market]",                 "adapter.openVote — allocates fresh e3Id"],
+    ["bun run open [market]",                 "stage 5 · adapter.openVote — allocates fresh e3Id (needs escalation)"],
     ["bun run status [market]",               "show CRISP committee stage + (if decrypted) tally"],
-    ["bun run settle [market]",               "adapter.proposeFromCRISP — proposes outcome to trueo"],
+    ["bun run settle [market]",               "adapter.proposeFromCRISP — settles outcome from attesters"],
     ["bun run redeem [market]",               "redeem caller's winning shares"],
   ]],
   ["Operator helpers (low-level)", [

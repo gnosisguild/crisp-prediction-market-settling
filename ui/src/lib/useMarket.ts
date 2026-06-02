@@ -7,7 +7,7 @@ import { ADDRESSES } from "@/lib/addresses";
 
 export function useMarket(market: Address, account?: Address) {
   // Static-ish market metadata + dynamic balances/state in a single multicall.
-  const { data, refetch } = useReadContracts({
+  const { data, refetch, isLoading } = useReadContracts({
     contracts: [
       { address: market, abi: marketAbi, functionName: "marketQuestion" },
       { address: market, abi: marketAbi, functionName: "marketSource" },
@@ -22,9 +22,19 @@ export function useMarket(market: Address, account?: Address) {
       { address: market, abi: marketAbi, functionName: "noToken" },
       { address: ADDRESSES.adapter, abi: adapterAbi, functionName: "e3IdOf", args: [market] },
       { address: ADDRESSES.adapter, abi: adapterAbi, functionName: "proposed", args: [market] },
+      { address: ADDRESSES.adapter, abi: adapterAbi, functionName: "voteOpenedAt", args: [market] },
+      { address: ADDRESSES.adapter, abi: adapterAbi, functionName: "inputWindowDuration" },
       { address: market, abi: marketAbi, functionName: "price" },
       { address: market, abi: marketAbi, functionName: "yesReserve" },
       { address: market, abi: marketAbi, functionName: "noReserve" },
+      // optimistic escalation ladder state (indices 18–24)
+      { address: market, abi: marketAbi, functionName: "proposedOutcome" },
+      { address: market, abi: marketAbi, functionName: "proposedAt" },
+      { address: market, abi: marketAbi, functionName: "disputed" },
+      { address: market, abi: marketAbi, functionName: "tokenVoteYes" },
+      { address: market, abi: marketAbi, functionName: "tokenVoteNo" },
+      { address: market, abi: marketAbi, functionName: "tokenVoteRecorded" },
+      { address: market, abi: marketAbi, functionName: "escalated" },
     ],
     query: { refetchInterval: 8_000 },
   });
@@ -70,16 +80,27 @@ export function useMarket(market: Address, account?: Address) {
     noToken,
     e3Id,
     proposedFromCrisp: Boolean(data?.[12]?.result),
+    voteOpenedAt: (data?.[13]?.result as bigint) ?? 0n,
+    inputWindowDuration: (data?.[14]?.result as bigint) ?? 0n,
     usdcBalance: balances?.[0]?.result as bigint | undefined,
     usdcAllowance: balances?.[1]?.result as bigint | undefined,
     yesBalance: balances?.[2]?.result as bigint | undefined,
     noBalance: balances?.[3]?.result as bigint | undefined,
     e3Stage: Number(oracle?.[0]?.result ?? 0),
     tally: (oracle?.[1]?.result as readonly bigint[] | undefined) ?? [],
-    yesPrice: (data?.[13]?.result as readonly [bigint, bigint] | undefined)?.[0] ?? 5n * 10n ** 17n,
-    noPrice: (data?.[13]?.result as readonly [bigint, bigint] | undefined)?.[1] ?? 5n * 10n ** 17n,
-    yesReserve: (data?.[14]?.result as bigint) ?? 0n,
-    noReserve: (data?.[15]?.result as bigint) ?? 0n,
+    yesPrice: (data?.[15]?.result as readonly [bigint, bigint] | undefined)?.[0] ?? 5n * 10n ** 17n,
+    noPrice: (data?.[15]?.result as readonly [bigint, bigint] | undefined)?.[1] ?? 5n * 10n ** 17n,
+    yesReserve: (data?.[16]?.result as bigint) ?? 0n,
+    noReserve: (data?.[17]?.result as bigint) ?? 0n,
+    proposedOutcome: (data?.[18]?.result as bigint) ?? 0n,
+    proposedAt: (data?.[19]?.result as bigint) ?? 0n,
+    disputed: Boolean(data?.[20]?.result),
+    tokenVoteYes: (data?.[21]?.result as bigint) ?? 0n,
+    tokenVoteNo: (data?.[22]?.result as bigint) ?? 0n,
+    tokenVoteRecorded: Boolean(data?.[23]?.result),
+    escalated: Boolean(data?.[24]?.result),
+    // true until the first multicall resolves; stays false during background refetches.
+    isLoading: isLoading || data === undefined,
     refresh: () => {
       void refetch();
       void refetchBal();

@@ -40,7 +40,7 @@ contract DeploySepolia is Script {
   uint256 constant FIRST_CHALLENGE_PERIOD = 10 minutes;
   uint256 constant RESOLVER_BOND = 10 * 1e6;   // 10 USDC (small for testnet)
   uint256 constant YESNO_TOKEN_CAP = 1_000_000 * 1e6;
-  uint256 constant INPUT_WINDOW = 10 minutes;  // CRISP voting window length — short for demo iteration
+  uint256 constant INPUT_WINDOW = 20 minutes;  // CRISP voting window length — short for demo iteration
 
   // Initial feeToken to seed the adapter with so openVote can pay Enclave fees several times.
   // Each E3 request costs ~5.3 USDC on Sepolia at current Enclave pricing, so 20 USDC covers

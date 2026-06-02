@@ -468,6 +468,18 @@ body { overflow-x: hidden; }
   50%      { opacity: 0.45; }
 }
 
+/* skeleton block for loading states */
+.skel {
+  display: block;
+  background: var(--rule-soft, #e3e3df);
+  border-radius: 2px;
+  animation: skel 1.4s ease-in-out infinite;
+}
+@keyframes skel {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.25; }
+}
+
 .scroll-y { overflow-y: auto; }
 
 /* tweaks panel adjustments */

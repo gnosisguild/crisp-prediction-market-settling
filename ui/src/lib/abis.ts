@@ -45,6 +45,14 @@ export const marketAbi = [
   { type: "function", stateMutability: "view", name: "resolverBondAmount", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", stateMutability: "view", name: "winningPosition", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", stateMutability: "view", name: "resolutionProposedAt", inputs: [], outputs: [{ type: "uint256" }] },
+  // optimistic escalation ladder state
+  { type: "function", stateMutability: "view", name: "proposedOutcome", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", stateMutability: "view", name: "proposedAt", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", stateMutability: "view", name: "disputed", inputs: [], outputs: [{ type: "bool" }] },
+  { type: "function", stateMutability: "view", name: "tokenVoteYes", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", stateMutability: "view", name: "tokenVoteNo", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", stateMutability: "view", name: "tokenVoteRecorded", inputs: [], outputs: [{ type: "bool" }] },
+  { type: "function", stateMutability: "view", name: "escalated", inputs: [], outputs: [{ type: "bool" }] },
   { type: "function", stateMutability: "view", name: "yesToken", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", stateMutability: "view", name: "noToken", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", stateMutability: "view", name: "paymentToken", inputs: [], outputs: [{ type: "address" }] },
@@ -60,6 +68,11 @@ export const marketAbi = [
   { type: "function", stateMutability: "nonpayable", name: "seedLiquidity", inputs: [{ name: "amount", type: "uint256" }], outputs: [] },
   { type: "function", stateMutability: "nonpayable", name: "redeem", inputs: [{ name: "amount", type: "uint256" }], outputs: [] },
   { type: "function", stateMutability: "nonpayable", name: "redeemAll", inputs: [], outputs: [] },
+  // optimistic escalation ladder actions (all permissionless)
+  { type: "function", stateMutability: "nonpayable", name: "proposeOutcome", inputs: [{ name: "outcome", type: "uint256" }], outputs: [] },
+  { type: "function", stateMutability: "nonpayable", name: "dispute", inputs: [], outputs: [] },
+  { type: "function", stateMutability: "nonpayable", name: "recordTokenVote", inputs: [{ name: "yesVotes", type: "uint256" }, { name: "noVotes", type: "uint256" }], outputs: [] },
+  { type: "function", stateMutability: "nonpayable", name: "escalateToAttesters", inputs: [], outputs: [] },
 ] as const;
 
 export const erc20Abi = [
@@ -76,6 +89,8 @@ export const erc20Abi = [
 export const adapterAbi = [
   { type: "function", stateMutability: "view", name: "e3IdOf", inputs: [{ name: "m", type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", stateMutability: "view", name: "proposed", inputs: [{ name: "m", type: "address" }], outputs: [{ type: "bool" }] },
+  { type: "function", stateMutability: "view", name: "voteOpenedAt", inputs: [{ name: "m", type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", stateMutability: "view", name: "inputWindowDuration", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", stateMutability: "nonpayable", name: "openVote", inputs: [{ name: "market", type: "address" }], outputs: [{ type: "uint256" }] },
   { type: "function", stateMutability: "nonpayable", name: "linkMarket", inputs: [{ name: "market", type: "address" }, { name: "e3Id", type: "uint256" }], outputs: [] },
   { type: "function", stateMutability: "nonpayable", name: "proposeFromCRISP", inputs: [{ name: "market", type: "address" }], outputs: [] },

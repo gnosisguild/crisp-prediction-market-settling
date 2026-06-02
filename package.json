@@ -13,6 +13,13 @@
 
     "create-market": "bun scripts/create-market.ts",
     "fresh": "bun scripts/fresh.ts",
+
+    "propose": "bun scripts/propose.ts",
+    "dispute": "bun scripts/dispute.ts",
+    "token-vote": "bun scripts/token-vote.ts",
+    "escalate": "bun scripts/escalate.ts",
+    "ladder": "bun scripts/ladder.ts",
+
     "open": "bun scripts/vote-open.ts",
     "status": "bun scripts/vote-status.ts",
     "settle": "bun scripts/settle.ts",

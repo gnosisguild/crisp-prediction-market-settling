@@ -19,6 +19,12 @@ const presets = [
   { label: "1 day",      sec: 24 * 60 * 60 },
 ];
 
+// Format a Date as the local "YYYY-MM-DDTHH:mm" string a datetime-local input expects.
+function toLocalInputValue(date: Date) {
+  const tzOffsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - tzOffsetMs).toISOString().slice(0, 16);
+}
+
 export default function CreateMarketPage() {
   const router = useRouter();
   const { address } = useAccount();
@@ -27,8 +33,9 @@ export default function CreateMarketPage() {
 
   const [question, setQuestion] = useState("Will testcase pass on first try?");
   const [source, setSource] = useState("https://github.com/example/repo");
-  const [info, setInfo] = useState("Resolved by an encrypted CRISP committee vote at close.");
-  const [duration, setDuration] = useState(2 * 60);
+  const [info, setInfo] = useState("Resolved optimistically; disputes escalate to an encrypted CRISP attester vote.");
+  // Absolute close time, held as a datetime-local string. Defaults to now + 2 minutes.
+  const [endTime, setEndTime] = useState(() => toLocalInputValue(new Date(Date.now() + 2 * 60 * 1000)));
   const [busy, setBusy] = useState(false);
   const [busyMsg, setBusyMsg] = useState("Creating…");
   const [err, setErr] = useState<string | undefined>();
@@ -36,11 +43,22 @@ export default function CreateMarketPage() {
   async function onCreate() {
     if (!client || !address) return;
     setErr(undefined);
+
+    const endMs = new Date(endTime).getTime();
+    if (Number.isNaN(endMs)) {
+      setErr("Pick a valid close date and time.");
+      return;
+    }
+    if (endMs <= Date.now()) {
+      setErr("Close time must be in the future.");
+      return;
+    }
+
     setBusy(true);
     try {
       // ---- 1. createMarket ----
       setBusyMsg("Creating market…");
-      const endOfTrading = BigInt(Math.floor(Date.now() / 1000) + duration);
+      const endOfTrading = BigInt(Math.floor(endMs / 1000));
       const hash = await writeContractAsync({
         address: ADDRESSES.manager,
         abi: managerAbi,
@@ -146,7 +164,7 @@ export default function CreateMarketPage() {
           Create a market resolved by <em>encrypted vote</em>.
         </h1>
         <div className="blurb">
-          Spin up a binary market. Once trading closes, anyone opens the CRISP vote — that&apos;s the moment a committee is allocated, not before. After voters cast encrypted ballots and the tally is decrypted, anyone settles the market on-chain.
+          Spin up a binary market. When trading closes, anyone optimistically proposes the outcome. If it&apos;s disputed, resolution escalates — a public token vote, then a just-in-time CRISP attester committee that threshold-decrypts a sealed ballot to settle it on-chain.
         </div>
       </div>
 
@@ -174,11 +192,24 @@ export default function CreateMarketPage() {
           </div>
 
           <div className="bet-field">
-            <label>Trading window</label>
-            <div className="preset">
+            <label>Trading closes at</label>
+            <div className="bet-input">
+              <input
+                type="datetime-local"
+                value={endTime}
+                min={toLocalInputValue(new Date())}
+                onChange={(e) => setEndTime(e.target.value)}
+                style={{ fontSize: 14 }}
+              />
+            </div>
+            <div className="preset" style={{ marginTop: 10 }}>
               {presets.map((p) => (
-                <button key={p.sec} className={duration === p.sec ? "on" : ""} onClick={() => setDuration(p.sec)}>
-                  {p.label}
+                <button
+                  key={p.sec}
+                  type="button"
+                  onClick={() => setEndTime(toLocalInputValue(new Date(Date.now() + p.sec * 1000)))}
+                >
+                  +{p.label}
                 </button>
               ))}
             </div>
@@ -196,13 +227,25 @@ export default function CreateMarketPage() {
               <span style={{ color: "var(--muted)" }}>now</span> &nbsp;&nbsp;&nbsp; trading opens · users mint YES + NO pairs
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              <span style={{ color: "var(--muted)" }}>+ {Math.round(duration / 60)} min</span> &nbsp;&nbsp;&nbsp; trading closes — anyone calls <span className="kbd">openVote</span>
+              <span style={{ color: "var(--muted)" }}>
+                {(() => {
+                  const ms = new Date(endTime).getTime();
+                  if (Number.isNaN(ms)) return "—";
+                  return new Date(ms).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+                })()}
+              </span> &nbsp;&nbsp;&nbsp; trading closes — anyone proposes an outcome
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              <span style={{ color: "var(--muted)" }}>+ voting</span> &nbsp;&nbsp;&nbsp; CRISP committee tallies encrypted ballots
+              <span style={{ color: "var(--muted)" }}>+ dispute</span> &nbsp;&nbsp;&nbsp; challenged → public token vote
             </p>
             <p style={{ margin: "8px 0 0" }}>
-              <span style={{ color: "var(--muted)" }}>+ decrypt</span> &nbsp;&nbsp;&nbsp; anyone calls <span className="kbd">proposeFromCRISP</span>
+              <span style={{ color: "var(--muted)" }}>+ escalate</span> &nbsp;&nbsp;&nbsp; <span className="kbd">openVote</span> allocates the CRISP committee (JIT)
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              <span style={{ color: "var(--muted)" }}>+ vote</span> &nbsp;&nbsp;&nbsp; sealed ballots · committee threshold-decrypts
+            </p>
+            <p style={{ margin: "8px 0 0" }}>
+              <span style={{ color: "var(--muted)" }}>+ settle</span> &nbsp;&nbsp;&nbsp; anyone calls <span className="kbd">proposeFromCRISP</span>
             </p>
             <p style={{ margin: "8px 0 0" }}>
               <span style={{ color: "var(--muted)" }}>+ challenge</span> &nbsp;&nbsp;&nbsp; market finalises · winners redeem
@@ -211,7 +254,7 @@ export default function CreateMarketPage() {
 
           <div style={{ marginTop: 18, padding: 12, background: "var(--mint-deep)", fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-soft)", lineHeight: 1.55 }}>
             <div style={{ color: "var(--ink)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Why JIT</div>
-            A CRISP committee allocates real ciphernode resources. Spinning it up at market creation would force them to babysit for the whole trading window. JIT allocation only spends those resources when voting actually needs to happen.
+            A CRISP committee allocates real ciphernode resources. Most resolutions are never disputed, so spinning one up at creation would waste them. JIT allocation only spends those resources when a dispute actually escalates to the attester vote.
           </div>
 
           {!address ? (

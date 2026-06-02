@@ -67,13 +67,18 @@ contract SimpleTruthMarketManager {
     return address(m);
   }
 
-  /// @notice Trueo-compatible: anyone can propose by posting the bond.
+  /// @notice Settle a market from the attester (CRISP) layer. Kept under the trueo-compatible
+  ///         `proposeResolution` name so the CRISPResolverAdapter's ITruthMarketManager call site
+  ///         is unchanged. The optimistic propose/dispute/token-vote/escalate stages happen
+  ///         directly on the market; this is only the final attester settle, which posts the one
+  ///         real resolver bond. Reaching here requires the market to be escalated (enforced by
+  ///         SimpleTruthMarket.settleFromAttesters).
   function proposeResolution(address _market, uint256 _outcome) external {
     if (!isActiveMarket(_market)) revert MarketDoesNotExist(_market);
     SimpleTruthMarket m = SimpleTruthMarket(_market);
     if (m.winningPosition() != 0) revert MarketAlreadyResolved(_market);
 
-    m.proposeResolution(_outcome);
+    m.settleFromAttesters(_outcome);
     oracleBonds.sendResolverBondToMarket(_market, msg.sender, m.resolverBondAmount());
     resolverAddress[_market] = msg.sender;
     emit ResolutionProposed(_market, msg.sender, _outcome);

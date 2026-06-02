@@ -21,34 +21,37 @@ export default function HomePage() {
   const [filter, setFilter] = useState<"All" | "Trading" | "Resolving" | "Finalized">("All");
   const [search, setSearch] = useState("");
 
+  // "Resolving" = anything past trading and not yet finalized — i.e. the whole escalation ladder
+  // (OpenForResolution, ResolutionProposed, DisputeRaised, TokenVote/SetByCouncil, Escalated…).
+  // Bucketing only on OpenForResolution/ResolutionProposed dropped the ladder states, so markets
+  // mid-dispute (where you open the E3 / vote) vanished from this view on refresh.
+  const isResolving = (status: number) =>
+    status !== MarketStatus.Created && status !== MarketStatus.Finalized;
+
   const filtered = useMemo(() => {
-    let xs = markets;
+    // Markets come from the manager in creation order (oldest first). Show newest first, so the
+    // featured card and the top of the list are the most recently created market.
+    let xs = markets.slice().reverse();
     if (filter === "Trading") xs = xs.filter((m) => m.status === MarketStatus.Created);
-    if (filter === "Resolving")
-      xs = xs.filter(
-        (m) => m.status === MarketStatus.OpenForResolution || m.status === MarketStatus.ResolutionProposed,
-      );
+    if (filter === "Resolving") xs = xs.filter((m) => isResolving(m.status));
     if (filter === "Finalized") xs = xs.filter((m) => m.status === MarketStatus.Finalized);
     if (search) xs = xs.filter((m) => m.question.toLowerCase().includes(search.toLowerCase()));
     return xs;
   }, [markets, filter, search]);
 
   const featured = filtered[0];
-  const rest = filtered.slice(1);
 
   const liveCount = markets.filter((m) => m.status === MarketStatus.Created).length;
-  const resolvingCount = markets.filter(
-    (m) => m.status === MarketStatus.OpenForResolution || m.status === MarketStatus.ResolutionProposed,
-  ).length;
+  const resolvingCount = markets.filter((m) => isResolving(m.status)).length;
 
   return (
     <div className="fade-in">
       <div className="hero">
         <h1>
-          Markets settled by <em>sealed-vote</em> consensus.
+          Optimistic markets, <em>sealed-vote</em> final say.
         </h1>
         <div className="blurb">
-          Every market here resolves through a CRISP committee — encrypted partial decryption shares, threshold reveal, no single oracle holds the key.
+          Resolutions are optimistic — proposed and trusted by default. Only a disputed one escalates to a CRISP attester committee, which threshold-decrypts a sealed ballot to settle it. No single oracle holds the key.
         </div>
       </div>
 
@@ -85,19 +88,31 @@ export default function HomePage() {
               <span className="tag">Featured</span>
               <span className="tag live">{statusLabel(featured.status)}</span>
               <span className="tag">{fmtClosesIn(featured.endOfTrading, now)}</span>
-              <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 11, color: "var(--muted)" }}>
-                E3 #{featured.e3Id.toString()}
-              </span>
+              {featured.e3Id > 0n && (
+                <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 11, color: "var(--muted)" }}>
+                  E3 #{featured.e3Id.toString()}
+                </span>
+              )}
             </div>
-            <h2>{featured.question}</h2>
+            <Link href={`/markets/${featured.address}`} style={{ textDecoration: "none", color: "inherit" }}>
+              <h2 style={{ cursor: "pointer" }}>{featured.question}</h2>
+            </Link>
             <div className="prob">
               <div className="pct">{yesPctNumber(featured.yesPrice).toFixed(1)}<span className="small">% YES</span></div>
               <div className="label">Implied probability · current pool price</div>
             </div>
             <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 10, fontFamily: "var(--mono)", fontSize: 11, color: "var(--muted)" }}>
               <span style={{ color: "var(--live)" }}>●</span>
-              Resolves via CRISP committee · E3 #{featured.e3Id.toString()}
+              {featured.e3Id > 0n
+                ? `Sealed attester vote live · E3 #${featured.e3Id.toString()}`
+                : "Optimistic — disputes escalate to a sealed CRISP attester vote"}
             </div>
+            <Link
+              href={`/markets/${featured.address}`}
+              style={{ marginTop: 16, display: "inline-block", fontFamily: "var(--mono)", fontSize: 12, color: "var(--ink)", borderBottom: "1px solid var(--ink)", textDecoration: "none" }}
+            >
+              Open market — resolve / vote →
+            </Link>
           </div>
           <div className="right">
             <h3>Take a position</h3>
@@ -117,7 +132,7 @@ export default function HomePage() {
               <div style={{ color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
                 How resolution works
               </div>
-              At market close, an oracle committee runs an encrypted CRISP vote on the outcome. Once the threshold tally is decrypted on-chain, anyone can permissionlessly settle the market.
+              At close, anyone optimistically proposes the outcome. If it&apos;s disputed it escalates — a public token vote, then a sealed CRISP attester committee that threshold-decrypts the verdict. Undisputed proposals just finalize.
             </div>
           </div>
         </div>
@@ -140,16 +155,14 @@ export default function HomePage() {
             <Link href="/create" style={{ color: "var(--ink)", borderBottom: "1px solid var(--ink)" }}>create one</Link>.
           </div>
         )}
-        {rest.map((m, i) => (
+        {filtered.map((m, i) => (
           <Link
             key={m.address}
             href={`/markets/${m.address}`}
-            className={`market-row ${
-              m.status === MarketStatus.ResolutionProposed || m.status === MarketStatus.OpenForResolution ? "resolving" : ""
-            }`}
+            className={`market-row ${isResolving(m.status) ? "resolving" : ""}`}
             style={{ textDecoration: "none", color: "inherit" }}
           >
-            <div className="idx">{String(i + 2).padStart(2, "0")}</div>
+            <div className="idx">{String(i + 1).padStart(2, "0")}</div>
             <div className="q">
               <span className="cat">{statusLabel(m.status)}</span>
               {m.question}

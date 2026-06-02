@@ -148,6 +148,14 @@ contract SepoliaForkOpenVote is Test {
     vm.warp(endOfTrading + 1);
     assertEq(uint256(SimpleTruthMarket(market).getCurrentStatus()), uint256(MarketStatus.OpenForResolution));
 
+    // openVote now only works once a dispute has escalated to the attester layer. Walk the
+    // optimistic ladder: propose → dispute → token vote → escalate.
+    SimpleTruthMarket(market).proposeOutcome(1);
+    SimpleTruthMarket(market).dispute();
+    SimpleTruthMarket(market).recordTokenVote(30, 70);
+    SimpleTruthMarket(market).escalateToAttesters();
+    assertEq(uint256(SimpleTruthMarket(market).getCurrentStatus()), uint256(MarketStatus.EscalatedDisputeRaised));
+
     address caller = makeAddr("caller");
     vm.prank(caller);
     uint256 e3Id = adapter.openVote(market);

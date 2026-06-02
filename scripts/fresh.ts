@@ -91,6 +91,9 @@ if (nowSec < endOfTrading) {
 // 3. openVote (top up first so the request fee is covered)
 let e3Id = await castU256(ADAPTER, "e3IdOf(address)(uint256)", [MARKET]);
 if (e3Id === 0n) {
+  step("escalation ladder (propose → dispute → token vote → escalate)");
+  await run("bun", ["scripts/ladder.ts", MARKET]);
+
   step("topping up adapter fee balance");
   await run("bun", ["scripts/top-up.ts", process.env.TOPUP_USDC ?? "20"]);
 

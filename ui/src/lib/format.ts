@@ -34,9 +34,37 @@ export function fmtClosesIn(toSec: bigint | undefined, nowSec?: number): string 
   return `closes in ${fmtRel(toSec, nowSec)}`;
 }
 
+/// Format a duration (in seconds) as a compact length, e.g. "30m", "1h 5m", "2d".
+export function fmtDuration(secs: bigint | number | undefined): string {
+  if (secs === undefined) return "—";
+  const s = Number(secs);
+  if (s <= 0) return "0m";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return m % 60 === 0 ? `${h}h` : `${h}h ${m % 60}m`;
+  const d = Math.floor(h / 24);
+  return h % 24 === 0 ? `${d}d` : `${d}d ${h % 24}h`;
+}
+
 export function shortAddr(a: string | undefined): string {
   if (!a) return "—";
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
+
+/// Human label for an E3 lifecycle stage (IEnclaveMinimal.E3Stage). Shared by the
+/// resolution panel, the oracle overview, and the vote page.
+export function e3StageName(s: number): string {
+  switch (s) {
+    case 0: return "Not started";
+    case 1: return "Requested";
+    case 2: return "Committee finalized";
+    case 3: return "Voting open";
+    case 4: return "Tallying";
+    case 5: return "Decrypted ✓";
+    case 6: return "Failed";
+    default: return "—";
+  }
 }
 
 export function statusLabel(s: number | undefined): string {
@@ -45,9 +73,9 @@ export function statusLabel(s: number | undefined): string {
     case 1: return "Open for Resolution";
     case 2: return "Resolution Proposed";
     case 3: return "Dispute Raised";
-    case 4: return "Set by Council";
+    case 4: return "Token Vote";
     case 5: return "Reset by Council";
-    case 6: return "Escalated";
+    case 6: return "Escalated to Attesters";
     case 7: return "Finalized";
     default: return "—";
   }

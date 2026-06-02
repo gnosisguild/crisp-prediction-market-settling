@@ -22,7 +22,7 @@ import {
   info,
   c,
 } from "./_env";
-import { voterCli } from "./_proc";
+import { voterCli, run } from "./_proc";
 
 const E3_KEY_PUBLISHED = 3;
 
@@ -31,6 +31,12 @@ const VOTER = voterAddress();
 const API = requireApi();
 
 const ROUND_JSON = `/tmp/crisp-round-${MARKET.slice(2, 10)}.json`;
+
+// ---------- step 0: walk the escalation ladder ----------
+// openVote now only works once a dispute has escalated to the attester layer. Walk
+// propose → dispute → token vote → escalate first (idempotent — skips done stages).
+step("ladder", "ensuring the dispute has escalated to the attester layer");
+await run("bun", ["scripts/ladder.ts", MARKET]);
 
 // ---------- step 1: open vote ----------
 step("prep", "checking if CRISP vote is open");
@@ -67,7 +73,7 @@ if (oracleList.length > 0 && !oracleList.includes(VOTER.toLowerCase())) {
 step("dkg", "waiting for committee to publish the BFV public key");
 {
   const MAX_WAIT_MS = 15 * 60 * 1000;
-  const POLL_MS = 10_000;
+  const POLL_MS = 60_000;
   const startedAt = Date.now();
   let lastStage = -1;
   while (true) {

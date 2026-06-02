@@ -53,6 +53,10 @@ contract CRISPResolverAdapter is Ownable {
 
   mapping(address => uint256) public e3IdOf;
   mapping(address => bool) public proposed;
+  // Timestamp openVote ran for a market. The E3 voting (input) window is
+  // [voteOpenedAt, voteOpenedAt + inputWindowDuration]; the UI uses this to show how long the
+  // vote runs and how long is left.
+  mapping(address => uint256) public voteOpenedAt;
 
   /* ---------- events ---------- */
 
@@ -109,10 +113,11 @@ contract CRISPResolverAdapter is Ownable {
   function openVote(address market) external returns (uint256 e3Id) {
     if (e3IdOf[market] != 0) revert MarketAlreadyHasVote(market);
 
-    // Time gate: trueo signals that trading has closed by moving the market into
-    // OpenForResolution. Anything other than Created means trading is over.
+    // Stage gate: the CRISP attester committee is only allocated once a dispute has escalated
+    // past the public token-holder vote. The market signals this with EscalatedDisputeRaised.
+    // This is the just-in-time inversion: voting happens on escalation, not at trading close.
     MarketStatus s = ITruthMarket(market).getCurrentStatus();
-    if (s == MarketStatus.Created) revert TradingStillOpen(market, s);
+    if (s != MarketStatus.EscalatedDisputeRaised) revert TradingStillOpen(market, s);
 
     // Build the E3 request from our deploy-time template.
     uint256[2] memory window = [block.timestamp, block.timestamp + inputWindowDuration];
@@ -134,6 +139,7 @@ contract CRISPResolverAdapter is Ownable {
 
     (e3Id, ) = enclave.request(params);
     e3IdOf[market] = e3Id;
+    voteOpenedAt[market] = block.timestamp;
     emit VoteOpened(market, e3Id, msg.sender);
   }
 

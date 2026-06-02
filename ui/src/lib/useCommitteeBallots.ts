@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePublicClient } from "wagmi";
 import { parseAbiItem, type Address, type Hex } from "viem";
 
@@ -17,20 +17,23 @@ export type Ballot = {
   index: bigint;
 };
 
-// Sepolia produces ~12s blocks. 100_000 blocks ≈ 2 weeks — more than enough lookback
-// for any practical demo, while keeping getLogs cheap on free RPC endpoints.
-const LOOKBACK_BLOCKS = 100_000n;
-const POLL_MS = 8_000;
+// Sepolia produces ~12s blocks. 50_000 blocks ≈ 1 week — ample lookback for a demo while
+// keeping the getLogs range bounded.
+const LOOKBACK_BLOCKS = 50_000n;
+const POLL_MS = 15_000;
+const ZERO = "0x0000000000000000000000000000000000000000";
 
 export function useCommitteeBallots(crispProgram: Address | undefined, e3Id: bigint): Ballot[] {
   const client = usePublicClient();
   const [ballots, setBallots] = useState<Ballot[]>([]);
+  // Cache enriched ballots by a stable key so each poll only fetches tx/block for NEW ballots
+  // instead of re-enriching everything (the old behaviour did up to ~64 RPC calls per tick).
+  const cacheRef = useRef<Map<string, Ballot>>(new Map());
 
   useEffect(() => {
-    if (!client || !crispProgram || crispProgram === "0x0000000000000000000000000000000000000000" || e3Id === 0n) {
-      setBallots([]);
-      return;
-    }
+    cacheRef.current = new Map();
+    setBallots([]);
+    if (!client || !crispProgram || crispProgram === ZERO || e3Id === 0n) return;
 
     let cancelled = false;
 
@@ -46,32 +49,33 @@ export function useCommitteeBallots(crispProgram: Address | undefined, e3Id: big
           toBlock: head,
         });
 
-        // Enrich with tx.from + block.timestamp. Cap at 32 most-recent to keep RPC cheap.
+        const cache = cacheRef.current;
+        // Only enrich ballots we haven't already fetched. Cap at the 32 most recent.
         const recent = logs.slice(-32);
-        const enriched = await Promise.all(
-          recent.map(async (log) => {
+        const fresh = recent.filter((l) => !cache.has(`${l.transactionHash}:${l.args.index ?? 0n}`));
+        await Promise.all(
+          fresh.map(async (log) => {
             const [tx, block] = await Promise.all([
               client!.getTransaction({ hash: log.transactionHash! }),
               client!.getBlock({ blockHash: log.blockHash! }),
             ]);
-            return {
+            cache.set(`${log.transactionHash}:${log.args.index ?? 0n}`, {
               txHash: log.transactionHash!,
               blockNumber: log.blockNumber!,
               blockTimestamp: block.timestamp,
               submitter: tx.from,
               encryptedVote: (log.args.encryptedVote ?? "0x") as Hex,
               index: log.args.index ?? 0n,
-            } satisfies Ballot;
+            });
           }),
         );
 
         if (!cancelled) {
-          // Newest first.
-          enriched.sort((a, b) => Number(b.blockNumber - a.blockNumber));
-          setBallots(enriched);
+          const all = Array.from(cache.values()).sort((a, b) => Number(b.blockNumber - a.blockNumber));
+          setBallots(all);
         }
       } catch (e) {
-        // Network blip / RPC throttle — keep what we have and try again on the next tick.
+        // Network blip / RPC throttle — keep what we have and retry next tick.
         if (!cancelled) console.warn("useCommitteeBallots:", e instanceof Error ? e.message : e);
       }
     }

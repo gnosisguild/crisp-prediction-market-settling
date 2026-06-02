@@ -2,8 +2,8 @@ export function BottomBar() {
   return (
     <div className="bottombar">
       <div>
-        <span className="seq">// CRISP × TRUEO PoC // </span>
-        Encrypted-vote-resolved prediction markets — each market settles through a CRISP committee, no single oracle holds the key.
+        <span className="seq">// CRISP PoC // </span>
+        Optimistic prediction markets with a private CRISP attester vote as the final dispute layer — no single oracle holds the key.
       </div>
       <div>
         <a href="https://github.com/gnosisguild/enclave" target="_blank" rel="noopener noreferrer">enclave</a>

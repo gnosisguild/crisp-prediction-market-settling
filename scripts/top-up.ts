@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { privateKeyToAccount } from "viem/accounts";
 import { ADAPTER, requireRpc, requireDeployerKey, log } from "./_common";
 
-const amount = BigInt(process.argv[2] ?? "20");        // human units
+const amount = BigInt(process.argv[2] ?? "10000000");        // human units
 const wei = amount * 1_000_000n;                       // 6 decimals
 const RPC = requireRpc("run top-up");
 const PK = requireDeployerKey("run top-up");
